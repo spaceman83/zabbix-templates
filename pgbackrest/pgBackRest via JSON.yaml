@@ -1,0 +1,194 @@
+zabbix_export:
+  version: '7.0'
+  template_groups:
+    - uuid: 1eabe3f2ffe3491f96eaa5cc10056599
+      name: PlatformService/Servers
+  templates:
+    - uuid: 49ad4a2765254d65a9b2fa505e7a7674
+      template: pgBackRest
+      name: pgBackRest
+      description: |
+        Processes information from 'pgbackrest info' 
+        
+        zabbix user needs to be added to the postgres group
+        
+        UserParameter=pgbackrest.info.get, /usr/bin/pgbackrest info --output=json
+        
+        needs to be set somewhere in the zabbix configuration
+      groups:
+        - name: PlatformService/Servers
+      items:
+        - uuid: 670bb1887ad74036985e23770b34bd15
+          name: 'pgBackRest - Info JSON'
+          key: pgbackrest.info.get
+          delay: 30m
+          history: '0'
+          value_type: TEXT
+          trends: '0'
+          description: 'Polled once every 30m'
+        - uuid: 3696982e6e614528bc7fbf1ff940e193
+          name: 'pgBackRest - Overall Status'
+          type: DEPENDENT
+          key: pgbackrest.info.status
+          delay: '0'
+          trends: '0'
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$[0].status.code'
+            - type: DISCARD_UNCHANGED_HEARTBEAT
+              parameters:
+                - '604800'
+          master_item:
+            key: pgbackrest.info.get
+          triggers:
+            - uuid: cb30f93a3a7b4a50b2e008ff1be5b8fa
+              expression: last(/pgBackRest/pgbackrest.info.status)<>0
+              name: 'pgBackRest - Overall Status not OK'
+              priority: AVERAGE
+              description: 'We expect Overall Status to be OK. Alert if otherwise'
+      discovery_rules:
+        - uuid: 7b1caa7d21144f97a7f8b615a5e44c6b
+          name: 'pgBackRest - Get Backups'
+          type: DEPENDENT
+          key: pgbackrest.info.backup
+          delay: '0'
+          item_prototypes:
+            - uuid: 64e9c3bd86964d0faa135d69a8dca849
+              name: 'pgBackRest - Backup ID {#BACKUPLABEL} Error State'
+              type: DEPENDENT
+              key: 'pgbackrest.info.backup[{#BACKUPLABEL}.error]'
+              delay: '0'
+              trends: '0'
+              description: |
+                Error state of backup with label {#BACKUPLABEL}
+                
+                is boolean, we expect these to be False, otherwise trigger alert.
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$[*].backup[?(@.label==''{#BACKUPLABEL}'')].error'
+                - type: TRIM
+                  parameters:
+                    - '[]'
+                - type: BOOL_TO_DECIMAL
+                  parameters:
+                    - ''
+                - type: DISCARD_UNCHANGED_HEARTBEAT
+                  parameters:
+                    - '604800'
+              master_item:
+                key: pgbackrest.info.get
+              trigger_prototypes:
+                - uuid: 93af289b102b4199b0576f79c56355ea
+                  expression: 'last(/pgBackRest/pgbackrest.info.backup[{#BACKUPLABEL}.error],#3)<>0'
+                  name: 'pgBackRest - Backup ID {#BACKUPLABEL} in error state'
+                  priority: AVERAGE
+            - uuid: a97cf4a709874a44977aa3080a198041
+              name: 'pgBackRest - Backup ID {#BACKUPLABEL} Backup Size'
+              type: DEPENDENT
+              key: 'pgbackrest.info.backup[{#BACKUPLABEL}.info.repository.size]'
+              delay: '0'
+              trends: '0'
+              units: B
+              description: 'Size of backup in Bytes'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$[*].backup[?(@.label==''{#BACKUPLABEL}'')].info.repository.size'
+                - type: TRIM
+                  parameters:
+                    - '[]'
+                - type: DISCARD_UNCHANGED_HEARTBEAT
+                  parameters:
+                    - '604800'
+              master_item:
+                key: pgbackrest.info.get
+            - uuid: be4983ffc8a84e2799f27bf6e276f12d
+              name: 'pgBackRest - Backup ID {#BACKUPLABEL} DB Size'
+              type: DEPENDENT
+              key: 'pgbackrest.info.backup[{#BACKUPLABEL}.info.size]'
+              delay: '0'
+              trends: '0'
+              units: B
+              description: 'Size of DB in Bytes'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$[*].backup[?(@.label==''{#BACKUPLABEL}'')].info.size'
+                - type: TRIM
+                  parameters:
+                    - '[]'
+                - type: DISCARD_UNCHANGED_HEARTBEAT
+                  parameters:
+                    - '604800'
+              master_item:
+                key: pgbackrest.info.get
+            - uuid: 1379cd0bd2054a988ac48731aa923c18
+              name: 'pgBackRest - Backup ID {#BACKUPLABEL} Type'
+              type: DEPENDENT
+              key: 'pgbackrest.info.backup[{#BACKUPLABEL}.type]'
+              delay: '0'
+              value_type: TEXT
+              trends: '0'
+              description: 'Size of backup in Bytes'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$[*].backup[?(@.label==''{#BACKUPLABEL}'')].type'
+                - type: TRIM
+                  parameters:
+                    - '[]'
+                - type: DISCARD_UNCHANGED_HEARTBEAT
+                  parameters:
+                    - '604800'
+              master_item:
+                key: pgbackrest.info.get
+          master_item:
+            key: pgbackrest.info.get
+          lld_macro_paths:
+            - lld_macro: '{#BACKUPLABEL}'
+              path: $.label
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$[*].backup[*]'
+        - uuid: 18c9dd7d0f1a4db98265f03016cc8c73
+          name: 'pgBackRest - Get Repos'
+          type: DEPENDENT
+          key: pgbackrest.info.repos
+          delay: '0'
+          item_prototypes:
+            - uuid: fb85002e0f3442a4ba84a73a23a0e049
+              name: 'pgBackRest - Repository {#REPOKEY} Status'
+              type: DEPENDENT
+              key: 'pgbackrest.info.repo[{#REPOKEY}.status]'
+              delay: '0'
+              description: 'Extracs Statuscode from JSON string. We expect these to be 0'
+              preprocessing:
+                - type: JSONPATH
+                  parameters:
+                    - '$[*].repo[?(@.key==''{#REPOKEY}'')].status.code'
+                - type: TRIM
+                  parameters:
+                    - '[]'
+                - type: DISCARD_UNCHANGED_HEARTBEAT
+                  parameters:
+                    - '604800'
+              master_item:
+                key: pgbackrest.info.get
+              trigger_prototypes:
+                - uuid: cab19d2787c74748be9a97d970c0b6f6
+                  expression: 'last(/pgBackRest/pgbackrest.info.repo[{#REPOKEY}.status])<>0'
+                  name: 'pgBackRest - Repository {#REPOKEY} Status not OK'
+                  priority: AVERAGE
+                  description: 'Will trigger if Status of the repository is anything but 0'
+          master_item:
+            key: pgbackrest.info.get
+          lld_macro_paths:
+            - lld_macro: '{#REPOKEY}'
+              path: $.key
+          preprocessing:
+            - type: JSONPATH
+              parameters:
+                - '$[*].repo[*]'
