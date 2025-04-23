@@ -81,7 +81,7 @@ zabbix_export:
                 key: pgbackrest.info.get
               trigger_prototypes:
                 - uuid: 93af289b102b4199b0576f79c56355ea
-                  expression: 'last(/pgBackRest/pgbackrest.info.backup[{#BACKUPLABEL}.error],#3)<>0'
+                  expression: 'last(/pgBackRest/pgbackrest.info.backup[{#BACKUPLABEL}.error])<>0'
                   name: 'pgBackRest - Backup ID {#BACKUPLABEL} in error state'
                   priority: AVERAGE
             - uuid: a97cf4a709874a44977aa3080a198041
